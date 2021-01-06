@@ -14,231 +14,84 @@
 
 package com.amazonaws.QueryEventListener;
 
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.logging.FileHandler;
-import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.facebook.presto.spi.eventlistener.EventListener;
 import com.facebook.presto.spi.eventlistener.QueryCompletedEvent;
-import com.facebook.presto.spi.eventlistener.QueryCreatedEvent;
-import com.facebook.presto.spi.eventlistener.SplitCompletedEvent;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+class ExtendableLog {
+    public String log_type;
+    public long create_time;
+    private Map<String, String> properties;
+
+    @JsonAnyGetter
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public ExtendableLog(String log_type, long create_time) {
+        this.log_type = log_type;
+        this.create_time = create_time;
+        this.properties = new HashMap<String, String>();
+    }
+    public void put(String k, String v) {
+        properties.put(k,v);
+    }
+
+}
 
 public class QueryEventListener
         implements EventListener
 {
-    Logger logger;
-    FileHandler fh;
-    final String loggerName = "QueryLog";
+    private static final Logger logger = LogManager.getLogger(QueryEventListener.class);
 
-    public QueryEventListener()
-    {
-
-        createLogFile();
-
-    }
-
-    public QueryEventListener(Map<String, String> config)
-    {
-
-        createLogFile();
-
-    }
-
-    public void queryCreated(QueryCreatedEvent queryCreatedEvent)
-    {
-
-        StringBuilder msg = new StringBuilder();
-
-        try {
-
-            msg.append("---------------Query Created----------------------------");
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Query ID: ");
-            msg.append(queryCreatedEvent.getMetadata().getQueryId().toString());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Query State: ");
-            msg.append(queryCreatedEvent.getMetadata().getQueryState().toString());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("User: ");
-            msg.append(queryCreatedEvent.getContext().getUser().toString());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Create Time: ");
-            msg.append(queryCreatedEvent.getCreateTime());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Principal: ");
-            msg.append(queryCreatedEvent.getContext().getPrincipal());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Remote Client Address: ");
-            msg.append(queryCreatedEvent.getContext().getRemoteClientAddress());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Source: ");
-            msg.append(queryCreatedEvent.getContext().getSource());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("User Agent: ");
-            msg.append(queryCreatedEvent.getContext().getUserAgent());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Catalog: ");
-            msg.append(queryCreatedEvent.getContext().getCatalog());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Schema: ");
-            msg.append(queryCreatedEvent.getContext().getSchema());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Server Address: ");
-            msg.append(queryCreatedEvent.getContext().getServerAddress());
-
-            logger.info(msg.toString());
-        }
-        catch (Exception ex) {
-
-            logger.info(ex.getMessage());
-        }
-
-    }
 
     public void queryCompleted(QueryCompletedEvent queryCompletedEvent)
     {
-
+        DateTimeFormatter df = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSZ");
         String errorCode = null;
-        StringBuilder msg = new StringBuilder();
+        ExtendableLog log;
 
         try {
             errorCode = queryCompletedEvent.getFailureInfo().get().getErrorCode().getName().toString();
         }
         catch (NoSuchElementException noElEx) {
-            errorCode = null;
+
         }
-
+        if (errorCode != null) {
+            log = new ExtendableLog("COMPLETED_ERROR", queryCompletedEvent.getCreateTime().toEpochMilli());
+            log.put("error_code", errorCode);
+        } else {
+            log = new ExtendableLog("COMPLETED", queryCompletedEvent.getCreateTime().toEpochMilli());
+        }
         try {
+            log.put("query_id", queryCompletedEvent.getMetadata().getQueryId().toString());
+            log.put("user", queryCompletedEvent.getContext().getUser().toString());
+            log.put("create_time_str", queryCompletedEvent.getCreateTime().atZone(ZoneId.systemDefault()).format(df));
+            log.put("start_time_str", queryCompletedEvent.getExecutionStartTime().atZone(ZoneId.systemDefault()).format(df));
+            log.put("end_time_str", queryCompletedEvent.getEndTime().atZone(ZoneId.systemDefault()).format(df));
+            log.put("query", queryCompletedEvent.getMetadata().getQuery());
+            log.put("complete", Boolean.toString(queryCompletedEvent.getStatistics().isComplete()));
+            log.put("catalog", queryCompletedEvent.getContext().getCatalog().orElse(""));
+            log.put("schema", queryCompletedEvent.getContext().getSchema().orElse(""));
+            log.put("remote_client_address", queryCompletedEvent.getContext().getRemoteClientAddress().orElse(""));
+            log.put("source", queryCompletedEvent.getContext().getSource().orElse(""));
+            log.put("server_address", queryCompletedEvent.getContext().getServerAddress());
 
-            if (errorCode != null) {
-
-                msg.append("---------------Query Completed----------------------------");
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Query ID: ");
-                msg.append(queryCompletedEvent.getMetadata().getQueryId().toString());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Create Time: ");
-                msg.append(queryCompletedEvent.getCreateTime());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("User: ");
-                msg.append(queryCompletedEvent.getContext().getUser().toString());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Complete: ");
-                msg.append(queryCompletedEvent.getStatistics().isComplete());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Query Failure Error: ");
-                msg.append(errorCode);
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Remote Client Address: ");
-                msg.append(queryCompletedEvent.getContext().getRemoteClientAddress().toString());
-
-                logger.info(msg.toString());
-
-            }
-            else {
-
-                msg.append("---------------Query Completed----------------------------");
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Query ID: ");
-                msg.append(queryCompletedEvent.getMetadata().getQueryId().toString());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Create Time: ");
-                msg.append(queryCompletedEvent.getCreateTime());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("User: ");
-                msg.append(queryCompletedEvent.getContext().getUser().toString());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Complete: ");
-                msg.append(queryCompletedEvent.getStatistics().isComplete());
-                msg.append("\n");
-                msg.append("     ");
-                msg.append("Remote Client Address: ");
-                msg.append(queryCompletedEvent.getContext().getRemoteClientAddress().toString());
-
-                logger.info(msg.toString());
-            }
+            String jsonStr = new ObjectMapper().writeValueAsString(log);
+            logger.info(jsonStr);
         }
         catch (Exception ex) {
-            logger.info(ex.getMessage());
-        }
-    }
-
-    public void splitCompleted(SplitCompletedEvent splitCompletedEvent)
-    {
-        StringBuilder msg = new StringBuilder();
-
-        try {
-
-            msg.append("---------------Split Completed----------------------------");
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Query ID: ");
-            msg.append(splitCompletedEvent.getQueryId().toString());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Stage ID: ");
-            msg.append(splitCompletedEvent.getStageId().toString());
-            msg.append("\n");
-            msg.append("     ");
-            msg.append("Task ID: ");
-            msg.append(splitCompletedEvent.getTaskId().toString());
-
-            logger.info(msg.toString());
-
-        }
-        catch (Exception ex) {
-            logger.info(ex.getMessage());
-        }
-
-    }
-
-    public void createLogFile()
-    {
-
-        SimpleDateFormat dateTime = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-        String timeStamp = dateTime.format(new Date());
-        StringBuilder logPath = new StringBuilder();
-
-        logPath.append("/var/log/presto/queries-");
-        logPath.append(timeStamp);
-        logPath.append(".%g.log");
-
-        try {
-            logger = Logger.getLogger(loggerName);
-            fh = new FileHandler(logPath.toString(), 524288000, 5, true);
-            logger.addHandler(fh);
-            logger.setUseParentHandlers(false);
-            SimpleFormatter formatter = new SimpleFormatter();
-            fh.setFormatter(formatter);
-        }
-        catch (IOException e) {
-            logger.info(e.getMessage());
+            ex.printStackTrace();
         }
     }
 

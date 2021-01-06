@@ -17,7 +17,7 @@ then
 fi
 
 sudo mkdir -p /usr/lib/presto/plugin/queryeventlistener
-sudo /usr/bin/aws s3 cp s3://replace-with-your-bucket/QueryEventListener.jar /tmp
+sudo /usr/bin/aws s3 cp s3://idus-de-data/x_framework/emr/jar/QueryEventListener.jar /tmp
 sudo cp /tmp/QueryEventListener.jar /usr/lib/presto/plugin/queryeventlistener/
 
 if [ "$IS_MASTER" = true ]; then

@@ -28,7 +28,7 @@ public class QueryEventListenerFactory
 
     public EventListener create(Map<String, String> config)
     {
-        return new QueryEventListener(config);
+        return new QueryEventListener();
     }
 
 }
