@@ -6,7 +6,7 @@
         <RollingFile
                 name="rollingFile"
                 fileName="/var/log/presto/queries.log"
-                filePattern="/var/log/presto/queries.log.%d{yyyy-MM-dd}"
+                filePattern="/var/log/presto/queries.log.%d{yyyy-MM-dd}-%i"
                 ignoreExceptions="false">
             <PatternLayout>
                 <Pattern>%msg%n</Pattern>
